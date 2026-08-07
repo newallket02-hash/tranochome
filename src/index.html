@@ -63,6 +63,14 @@ td.pay.empty:hover { background:transparent; }
 .legend-item { font-size:13px; margin-bottom:9px; line-height:1.5; }
 .dot { display:inline-block; width:11px; height:11px; margin-right:8px; border-radius:3px; vertical-align:middle; }
 .c-tinex{background:#FF6B6B} .c-tp{background:#4ECDC4} .c-f88{background:#FFA07A} .c-200{background:#98D8C8} .c-hc{background:#45B7D1}
+    /* Mẹ gửi: ô tick xác nhận + ghi chú ngày (hover) */
+    td.me-pay { position:relative; cursor:pointer; user-select:none; transition:background-color .12s ease; }
+    td.me-pay:hover { background:#eafaef; }
+    td.me-pay.paid { background:#c8e6c9 !important; color:#1b5e20; }
+    td.me-pay.paid::before { content:"\2713"; position:absolute; left:6px; color:#2e7d32; font-weight:700; }
+    td.me-pay .me-note { display:none; position:absolute; z-index:20; right:0; top:100%; margin-top:4px; background:#1E2D5A; color:#fff; font-size:11px; font-weight:400; padding:6px 9px; border-radius:6px; white-space:nowrap; box-shadow:0 2px 8px rgba(0,0,0,.25); }
+    td.me-pay:hover .me-note { display:block; }
+    td.me-pay .me-dot { position:absolute; right:5px; top:5px; width:6px; height:6px; border-radius:50%; background:#1E2D5A; opacity:.5; }
 </style>
 </head>
 <body>
@@ -227,6 +235,12 @@ var paid = {};
 var bucket = null;
 try { paid = JSON.parse(window.localStorage.getItem(LOCAL_KEY) || '{}'); } catch (e) { paid = {}; }
 try { bucket = window.localStorage.getItem(BUCKET_KEY) || null; } catch (e) { bucket = null; }
+    var ME_KEY = 'tracking_me_paid_v1';
+    var MENOTE_KEY = 'tracking_me_note_v1';
+    var paidMe = {};
+    var meNote = {};
+    try { paidMe = JSON.parse(window.localStorage.getItem(ME_KEY) || '{}'); } catch (e) { paidMe = {}; }
+    try { meNote = JSON.parse(window.localStorage.getItem(MENOTE_KEY) || '{}'); } catch (e) { meNote = {}; }
 
 var totalCells = 0;
 rows.forEach(function (r) {
@@ -249,7 +263,12 @@ rows.forEach(function (r) {
     }
   });
   html += '<td class="num-static total-cell">' + fmt(r.total) + '</td>';
-  html += '<td class="num-static" style="color:#2e7d32;font-weight:600">' + fmt(r.me) + '</td>';
+  var meId = r.i + ':me';
+  var meIsPaid = paidMe[meId] ? ' paid' : '';
+  var meN = meNote[meId] ? String(meNote[meId]) : '';
+  var meNoteHtml = '<span class="me-note">' + (meN ? ('Mẹ gửi ngày: ' + meN) : 'Chưa có ghi chú ngày') + '</span>';
+  var meDot = meN ? '<span class="me-dot"></span>' : '';
+  html += '<td class="me-pay num-static' + meIsPaid + '" style="color:#2e7d32;font-weight:600" data-me="' + meId + '">' + fmt(r.me) + meDot + meNoteHtml + '</td>';
   html += '<td class="num-static" style="color:#e65100;font-weight:600">' + fmt(r.truc) + '</td>';
   tr.innerHTML = html;
   tbody.appendChild(tr);
@@ -272,7 +291,41 @@ document.querySelectorAll('td.pay').forEach(function (td) {
   });
 });
 
-function applyPaid() {
+function applyMe() {
+      document.querySelectorAll('td.me-pay').forEach(function (td) {
+        var id = td.getAttribute('data-me');
+        var n = meNote[id] ? String(meNote[id]) : '';
+        td.className = 'me-pay num-static' + (paidMe[id] ? ' paid' : '');
+        var noteEl = td.querySelector('.me-note');
+        if (noteEl) noteEl.textContent = n ? ('Mẹ gửi ngày: ' + n) : 'Chưa có ghi chú ngày';
+        var dot = td.querySelector('.me-dot');
+        if (n && !dot) { var d = document.createElement('span'); d.className = 'me-dot'; td.appendChild(d); }
+        if (!n && dot) { dot.parentNode.removeChild(dot); }
+      });
+    }
+    function bindMe() {
+      document.querySelectorAll('td.me-pay').forEach(function (td) {
+        if (td.getAttribute('data-bound') === '1') return;
+        td.setAttribute('data-bound', '1');
+        td.addEventListener('click', function () {
+          var id = td.getAttribute('data-me');
+          if (paidMe[id]) {
+            delete paidMe[id];
+            delete meNote[id];
+          } else {
+            var cur = meNote[id] ? String(meNote[id]) : '';
+            var d = window.prompt('Ngày mẹ gửi trong tháng (ví dụ: 05 hoặc 05/03):', cur);
+            if (d === null) return;
+            paidMe[id] = 1;
+            if (d.trim() !== '') meNote[id] = d.trim();
+          }
+          saveLocal();
+          fbPush();
+          applyMe();
+        });
+      });
+    }
+    function applyPaid() {
   document.querySelectorAll('td.pay').forEach(function (td) {
     if (td.className.indexOf('empty') !== -1) return;
     var id = td.getAttribute('data-cell');
@@ -282,6 +335,8 @@ function applyPaid() {
 
 function saveLocal() {
   try { window.localStorage.setItem(LOCAL_KEY, JSON.stringify(paid)); } catch (e) {}
+  try { window.localStorage.setItem(ME_KEY, JSON.stringify(paidMe)); } catch (e) {}
+  try { window.localStorage.setItem(MENOTE_KEY, JSON.stringify(meNote)); } catch (e) {}
 }
 
 /* ===== ĐỒNG BỘ ===== */
@@ -322,6 +377,7 @@ document.getElementById('t-debt').textContent = trieu(tDebt);
 document.getElementById('t-me').textContent = trieu(tMe);
 document.getElementById('t-truc').textContent = trieu(tTruc);
 updateProgress();
+bindMe();
 
 /* Firebase đồng bộ real-time được khởi tạo trong module ở cuối trang */
 setStatus(true, 'Đã đồng bộ (real-time)');
@@ -345,7 +401,7 @@ let _applyingRemote = false;
 window.fbPush = async function () {
   if (_applyingRemote) return;
   try {
-    await setDoc(docRef, { paid, updatedAt: Date.now() });
+    await setDoc(docRef, { paid, paidMe, meNote, updatedAt: Date.now() });
     if (typeof setStatus === "function") setStatus(true, "Đã đồng bộ");
   } catch (e) {
     if (typeof setStatus === "function") setStatus(false, "Lỗi đồng bộ");
@@ -358,8 +414,12 @@ onSnapshot(docRef, (snap) => {
   if (!data || !data.paid) return;
   _applyingRemote = true;
   paid = data.paid;
+  if (data.paidMe) paidMe = data.paidMe;
+  if (data.meNote) meNote = data.meNote;
   if (typeof saveLocal === "function") saveLocal();
   if (typeof applyPaid === "function") applyPaid();
+  if (typeof bindMe === "function") bindMe();
+  if (typeof applyMe === "function") applyMe();
   if (typeof updateProgress === "function") updateProgress();
   if (typeof setStatus === "function") setStatus(true, "Đã đồng bộ (real-time)");
   _applyingRemote = false;
