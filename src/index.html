@@ -191,6 +191,18 @@ months.forEach(function (o, i) {
   rows.push({ i: i, y: o.y, m: o.m, tinex: tinex, tp: tp, f88: f88, p200: p200, hc: hc, total: total, me: me, truc: truc });
 });
 
+/* Chuyển tiền Trúc bù sang Mẹ gửi từ 5/2029 đến 9/2034 */
+rows.forEach(function (r) {
+  var inRange = ((r.y > 2029) || (r.y === 2029 && r.m >= 5)) && ((r.y < 2034) || (r.y === 2034 && r.m <= 9));
+  if (inRange && r.truc > 0) {
+    tMe += r.truc;
+    tTruc -= r.truc;
+    r.me += r.truc;
+    r.truc = 0;
+  }
+});
+
+
 function fmt(v) {
   if (!v) return '<span class="zero">&mdash;</span>';
   return v.toLocaleString('vi-VN');
