@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tracking Trả Nợ - Lịch Thanh Toán</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family:'Segoe UI', Tahoma, sans-serif;
+  background:linear-gradient(135deg,#1E2D5A 0%,#667eea 100%);
+  min-height:100vh; padding:16px;
+}
+.container { max-width:1400px; margin:0 auto; }
+header { background:#fff; padding:20px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); margin-bottom:16px; }
+h1 { color:#1E2D5A; margin-bottom:8px; font-size:21px; }
+.subtitle { color:#666; font-size:13px; line-height:1.6; }
+.summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin:16px 0; }
+.summary-card { background:linear-gradient(135deg,#F5A623,#FFA500); color:#fff; padding:16px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); }
+.summary-card.green { background:linear-gradient(135deg,#43a047,#66bb6a); }
+.summary-card h3 { font-size:12px; font-weight:400; margin-bottom:6px; opacity:.95; }
+.summary-card .value { font-size:21px; font-weight:700; }
+.controls { background:#fff; padding:14px 16px; border-radius:8px; margin-bottom:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.controls button { padding:8px 16px; border:none; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600; }
+.btn-grey { background:#eee; color:#555; }
+.btn-grey:hover { background:#ddd; }
+.btn-sync { background:#1E2D5A; color:#fff; }
+.btn-sync:hover { background:#16224a; }
+.btn-sync2 { background:#43a047; color:#fff; }
+.btn-sync2:hover { background:#388e3c; }
+.progress-text { margin-left:auto; font-size:13px; color:#1E2D5A; font-weight:600; }
+.sync-status { font-size:12px; padding:5px 10px; border-radius:20px; background:#eef7ee; color:#2e7d32; font-weight:600; }
+.sync-status.off { background:#fdecea; color:#c0392b; }
+.hint { font-size:12px; color:#888; width:100%; }
+
+.table-container { background:#fff; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); overflow-x:auto; margin-bottom:16px; }
+table { border-collapse:collapse; width:100%; min-width:1000px; }
+th {
+  background:#1E2D5A; color:#fff; padding:10px 12px; text-align:right;
+  font-weight:600; font-size:12px; line-height:1.35;
+  white-space:nowrap; vertical-align:bottom;
+}
+th.left { text-align:left; }
+th small { display:block; font-weight:400; font-size:10px; opacity:.75; margin-top:2px; }
+td { padding:9px 12px; border-bottom:1px solid #eee; font-size:13px; white-space:nowrap; }
+tbody tr:hover { background:#fafafa; }
+tbody tr.divider td { border-bottom:2px solid #1E2D5A33; }
+.month-col { font-weight:600; color:#1E2D5A; }
+
+td.pay { text-align:right; font-variant-numeric:tabular-nums; color:#333; cursor:pointer; user-select:none; position:relative; transition:background-color .12s ease; border-radius:4px; }
+td.pay:hover { background:#eef3ff; }
+td.pay.paid { background:#c8e6c9 !important; color:#1b5e20; font-weight:600; }
+td.pay.paid::after { content:"\2713"; position:absolute; left:8px; color:#2e7d32; font-weight:700; }
+td.pay.empty { cursor:default; color:#ccc; }
+td.pay.empty:hover { background:transparent; }
+
+.num-static { text-align:right; font-variant-numeric:tabular-nums; }
+.zero { color:#ccc; }
+.total-cell { font-weight:700; color:#1E2D5A; }
+
+.legend { background:#fff; padding:18px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); }
+.legend h3 { color:#1E2D5A; margin-bottom:12px; font-size:15px; }
+.legend-item { font-size:13px; margin-bottom:9px; line-height:1.5; }
+.dot { display:inline-block; width:11px; height:11px; margin-right:8px; border-radius:3px; vertical-align:middle; }
+.c-tinex{background:#FF6B6B} .c-tp{background:#4ECDC4} .c-f88{background:#FFA07A} .c-200{background:#98D8C8} .c-hc{background:#45B7D1}
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>Tracking Trả Nợ &mdash; Lịch Thanh Toán</h1>
+  <p class="subtitle">
+    Kế hoạch trả nợ mẹ &middot; 09/2026 &ndash; 09/2034 &middot; Mẹ gửi tiền ngày 5 hàng tháng<br>
+    Bấm vào <strong>từng ô số tiền</strong> khi đã đóng khoản đó &mdash; ô sẽ tô xanh lá cây và có dấu &#10003;.
+  </p>
+</header>
+
+<div class="summary">
+  <div class="summary-card"><h3>Tổng nợ phải trả</h3><div class="value" id="t-debt">&mdash;</div></div>
+  <div class="summary-card"><h3>Mẹ sẽ gửi</h3><div class="value" id="t-me">&mdash;</div></div>
+  <div class="summary-card"><h3>Trúc bù thêm</h3><div class="value" id="t-truc">&mdash;</div></div>
+  <div class="summary-card green"><h3>Đã đóng</h3><div class="value" id="t-done">0 / 0</div></div>
+</div>
+
+<div class="controls">
+  <button class="btn-sync" onclick="enableSync()">Bật đồng bộ (máy đầu tiên)</button>
+  <button class="btn-sync2" onclick="enterSync()">Nhập mã đồng bộ</button>
+  <button class="btn-grey" onclick="showCode()">Xem mã của tôi</button>
+  <button class="btn-grey" onclick="resetAll()">Xóa đánh dấu</button>
+  <span class="sync-status off" id="sync-status">Chưa đồng bộ</span>
+  <span class="progress-text" id="progress"></span>
+  <span class="hint" id="hint">Kéo ngang bảng để xem hết các cột. Bấm "Bật đồng bộ" ở máy đầu tiên, rồi dùng "Nhập mã đồng bộ" ở các máy khác.</span>
+</div>
+
+<div class="table-container">
+<table>
+<thead>
+<tr>
+  <th class="left">Tháng</th>
+  <th>Tinex<small>ngày 3</small></th>
+  <th>Tiên Phong<small>ngày 9</small></th>
+  <th>F88<small>ngày 12</small></th>
+  <th>Khoản 200tr<small>ngày 19</small></th>
+  <th>Home Credit<small>ngày 21</small></th>
+  <th>Tổng nợ<small>cả tháng</small></th>
+  <th>Mẹ gửi<small>ngày 5</small></th>
+  <th>Trúc bù<small>phần thiếu</small></th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
+</div>
+
+<div class="legend">
+  <h3>Thông tin 5 khoản nợ</h3>
+  <div class="legend-item"><span class="dot c-tinex"></span><strong>Tinex</strong> &mdash; 2.710.162đ/tháng &middot; ngày 3 &middot; kỳ cuối 10/2027 (3.342.158đ)</div>
+  <div class="legend-item"><span class="dot c-tp"></span><strong>Tiên Phong (TPBank SL00000259304117)</strong> &mdash; <strong style="color:#d32f2f">1.950.000đ/tháng</strong> (1.501.815 gốc + 448.185 lãi) &middot; ngày 9 &middot; hết 02/2027</div>
+  <div class="legend-item"><span class="dot c-f88"></span><strong>F88 (Honda Vision 2022)</strong> &mdash; 2.573.126đ, giảm còn 2.102.574đ từ 12/2026 &middot; ngày 12 &middot; hết 07/2027</div>
+  <div class="legend-item"><span class="dot c-200"></span><strong>Ngân hàng chính sách 200 triệu</strong> &mdash; trả lãi 1.700.000đ đến 07/2027, từ 08/2027 trả 2.000.000đ gốc + lãi &middot; ngày 19 &middot; hết 09/2034</div>
+  <div class="legend-item"><span class="dot c-hc"></span><strong>Home Credit</strong> &mdash; 1.089.000đ/tháng &middot; ngày 21 &middot; hết 03/2029</div>
+</div>
+
+</div>
+
+<script>
+var TINEX = 2710162, TINEX_LAST = 3342158, TP = 1950000, HC = 1089000;
+function key(y, m) { return y + '-' + m; }
+
+var tinexMap = {};
+(function () {
+  var y = 2026, m = 9;
+  while (!(y > 2027 || (y === 2027 && m > 10))) {
+    tinexMap[key(y, m)] = (y === 2027 && m === 10) ? TINEX_LAST : TINEX;
+    m++; if (m > 12) { m = 1; y++; }
+  }
+})();
+
+var tpMap = {};
+[[2026,9],[2026,10],[2026,11],[2026,12],[2027,1],[2027,2]].forEach(function (p) {
+  tpMap[key(p[0], p[1])] = TP;
+});
+
+var f88Map = {};
+[[2026,9,2573126],[2026,10,2573126],[2026,11,2573126],[2026,12,2102574],
+ [2027,1,2102574],[2027,2,2102574],[2027,3,2102574],[2027,4,2102574],
+ [2027,5,2102574],[2027,6,2102574],[2027,7,2108285]].forEach(function (r) {
+  f88Map[key(r[0], r[1])] = r[2];
+});
+
+var months = [];
+for (var y = 2026; y <= 2034; y++) {
+  var s = (y === 2026) ? 9 : 1, e = (y === 2034) ? 9 : 12;
+  for (var m = s; m <= e; m++) months.push({ y: y, m: m });
+}
+
+var rem200 = 198000000, hcLeft = 31;
+var tDebt = 0, tMe = 0, tTruc = 0;
+var rows = [];
+
+months.forEach(function (o, i) {
+  var k = key(o.y, o.m);
+  var tinex = tinexMap[k] || 0;
+  var tp = tpMap[k] || 0;
+  var f88 = f88Map[k] || 0;
+  var hc = 0;
+  if (hcLeft > 0) { hc = HC; hcLeft--; }
+
+  var p200 = 0;
+  if (o.y < 2027 || (o.y === 2027 && o.m <= 7)) {
+    p200 = 1700000;
+  } else if (rem200 > 0) {
+    var lai = Math.round(rem200 * 0.0085);
+    var goc = Math.min(2000000, rem200);
+    p200 = goc + lai;
+    rem200 -= goc;
+  }
+
+  var me = 0;
+  if (o.y === 2026) me = 7500000;
+  else if (o.y === 2027 && o.m === 1) me = 7500000;
+  else if (o.y === 2027 && o.m >= 2 && o.m <= 7) me = 8000000;
+  else if (o.y === 2027 && o.m >= 8 && o.m <= 10) me = 6000000;
+  else if ((o.y === 2027 && o.m >= 11) || o.y === 2028 || (o.y === 2029 && o.m <= 4)) me = 3000000;
+
+  var total = tinex + tp + f88 + p200 + hc;
+  var truc = Math.max(0, total - me);
+  me = Math.min(me, total);
+
+  tDebt += total; tMe += me; tTruc += truc;
+  rows.push({ i: i, y: o.y, m: o.m, tinex: tinex, tp: tp, f88: f88, p200: p200, hc: hc, total: total, me: me, truc: truc });
+});
+
+function fmt(v) {
+  if (!v) return '<span class="zero">&mdash;</span>';
+  return v.toLocaleString('vi-VN');
+}
+
+var LOCAL_KEY = 'tracking_no_paid_cells_v1';
+var BUCKET_KEY = 'tracking_no_sync_bucket_v1';
+var paid = {};
+var bucket = null;
+try { paid = JSON.parse(window.localStorage.getItem(LOCAL_KEY) || '{}'); } catch (e) { paid = {}; }
+try { bucket = window.localStorage.getItem(BUCKET_KEY) || null; } catch (e) { bucket = null; }
+
+var totalCells = 0;
+rows.forEach(function (r) {
+  ['tinex','tp','f88','p200','hc'].forEach(function (f) { if (r[f] > 0) totalCells++; });
+});
+
+var tbody = document.getElementById('tbody');
+rows.forEach(function (r) {
+  var tr = document.createElement('tr');
+  if (r.m === 12) tr.className = 'divider';
+  var html = '<td class="month-col">' + (r.m < 10 ? '0' + r.m : r.m) + '/' + r.y + '</td>';
+  ['tinex','tp','f88','p200','hc'].forEach(function (f) {
+    var v = r[f];
+    var cellId = r.i + ':' + f;
+    if (v > 0) {
+      var isPaid = paid[cellId] ? ' paid' : '';
+      html += '<td class="pay' + isPaid + '" data-cell="' + cellId + '">' + v.toLocaleString('vi-VN') + '</td>';
+    } else {
+      html += '<td class="pay empty">&mdash;</td>';
+    }
+  });
+  html += '<td class="num-static total-cell">' + fmt(r.total) + '</td>';
+  html += '<td class="num-static" style="color:#2e7d32;font-weight:600">' + fmt(r.me) + '</td>';
+  html += '<td class="num-static" style="color:#e65100;font-weight:600">' + fmt(r.truc) + '</td>';
+  tr.innerHTML = html;
+  tbody.appendChild(tr);
+});
+
+document.querySelectorAll('td.pay').forEach(function (td) {
+  if (td.className.indexOf('empty') !== -1) return;
+  td.addEventListener('click', function () {
+    var id = td.getAttribute('data-cell');
+    if (td.className.indexOf('paid') !== -1) {
+      td.className = 'pay';
+      delete paid[id];
+    } else {
+      td.className = 'pay paid';
+      paid[id] = 1;
+    }
+    saveLocal();
+    fbPush();
+    updateProgress();
+  });
+});
+
+function applyPaid() {
+  document.querySelectorAll('td.pay').forEach(function (td) {
+    if (td.className.indexOf('empty') !== -1) return;
+    var id = td.getAttribute('data-cell');
+    td.className = paid[id] ? 'pay paid' : 'pay';
+  });
+}
+
+function saveLocal() {
+  try { window.localStorage.setItem(LOCAL_KEY, JSON.stringify(paid)); } catch (e) {}
+}
+
+/* ===== ĐỒNG BỘ ===== */
+function setStatus(on, text) {
+  var el = document.getElementById('sync-status');
+  el.textContent = text;
+  el.className = 'sync-status' + (on ? '' : ' off');
+}
+
+function enableSync() {
+  setStatus(true, 'Đã đồng bộ (real-time)');
+  document.getElementById('hint').innerHTML = 'Dữ liệu được đồng bộ real-time qua Firebase. Mọi máy mở cùng app sẽ tự cập nhật cho nhau.';
+}
+
+function enterSync() {
+  setStatus(true, 'Đã đồng bộ (real-time)');
+  document.getElementById('hint').innerHTML = 'Không cần mã nữa — dữ liệu tự đồng bộ real-time qua Firebase giữa các máy.';
+}
+
+function showCode() {
+  if (!bucket) { alert('Máy này chưa bật đồng bộ. Bấm "Bật đồng bộ" (nếu là máy đầu tiên) hoặc "Nhập mã đồng bộ".'); return; }
+  window.prompt('MÃ ĐỒNG BỘ của bạn (dùng để nhập trên máy khác):', bucket);
+}
+
+function resetAll() {
+  if (!confirm('Xóa tất cả đánh dấu đã đóng? (Nếu đang đồng bộ, các máy khác cũng sẽ bị xóa theo)')) return;
+  paid = {}; saveLocal(); applyPaid(); fbPush(); updateProgress();
+}
+
+function updateProgress() {
+  var n = Object.keys(paid).length;
+  document.getElementById('t-done').textContent = n + ' / ' + totalCells;
+  document.getElementById('progress').textContent = 'Đã đóng ' + n + '/' + totalCells + ' khoản (' + Math.round(n / totalCells * 100) + '%)';
+}
+
+function trieu(v) { return Math.round(v / 1000000).toLocaleString('vi-VN') + ' triệu'; }
+document.getElementById('t-debt').textContent = trieu(tDebt);
+document.getElementById('t-me').textContent = trieu(tMe);
+document.getElementById('t-truc').textContent = trieu(tTruc);
+updateProgress();
+
+/* Firebase đồng bộ real-time được khởi tạo trong module ở cuối trang */
+setStatus(true, 'Đã đồng bộ (real-time)');
+</script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+const firebaseConfig = {
+  apiKey: "AIzaSyBxaG7gGqbTvZ5fzTp949RQFalJmE0zthk",
+  authDomain: "truc-2528e.firebaseapp.com",
+  projectId: "truc-2528e",
+  storageBucket: "truc-2528e.firebasestorage.app",
+  messagingSenderId: "921102721350",
+  appId: "1:921102721350:web:4fde0b0c81cad0e2838547",
+  measurementId: "G-BHSDE656VY"
+};
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+const docRef = doc(db, "tracking", "paidCells");
+let _applyingRemote = false;
+window.fbPush = async function () {
+  if (_applyingRemote) return;
+  try {
+    await setDoc(docRef, { paid, updatedAt: Date.now() });
+    if (typeof setStatus === "function") setStatus(true, "Đã đồng bộ");
+  } catch (e) {
+    if (typeof setStatus === "function") setStatus(false, "Lỗi đồng bộ");
+    console.error(e);
+  }
+};
+onSnapshot(docRef, (snap) => {
+  if (!snap.exists()) return;
+  const data = snap.data();
+  if (!data || !data.paid) return;
+  _applyingRemote = true;
+  paid = data.paid;
+  if (typeof saveLocal === "function") saveLocal();
+  if (typeof applyPaid === "function") applyPaid();
+  if (typeof updateProgress === "function") updateProgress();
+  if (typeof setStatus === "function") setStatus(true, "Đã đồng bộ (real-time)");
+  _applyingRemote = false;
+});
+</script>
+</body>
+</html>
