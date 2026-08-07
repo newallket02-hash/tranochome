@@ -201,6 +201,19 @@ rows.forEach(function (r) {
     r.truc = 0;
   }
 });
+      /* Tháng 3/2027 đến 7/2027: Mẹ gửi 6 triệu, phần còn lại Trúc bù */
+      rows.forEach(function (r) {
+        var inR = (r.y === 2027 && r.m >= 3 && r.m <= 7);
+        if (inR) {
+          var keep = 6000000;
+          if (r.total > keep) {
+            var moved = (r.me - keep);
+            if (moved > 0) { tMe -= moved; tTruc += moved; }
+            r.me = keep;
+            r.truc = r.total - keep;
+          }
+        }
+      });
 
 
 function fmt(v) {
