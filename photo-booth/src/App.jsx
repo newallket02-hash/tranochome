@@ -52,6 +52,14 @@ function isTouchDevice() {
   return /Mac/.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
 }
 
+// Trình duyệt nằm trong ứng dụng (Zalo, Messenger, Facebook, Instagram, Kakao, Line...).
+// Loại này thường nuốt lệnh tải file mà không báo lỗi, nên không dùng đường tải file ở đây.
+function isInAppBrowser() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /; wv\)|FBAN|FBAV|FB_IAB|Instagram|Zalo|KAKAOTALK|Line\/|MicroMessenger|TikTok/i.test(ua);
+}
+
 // Đổi data URL sang Blob mà không cần fetch, để cú click tải file nằm gọn
 // trong thao tác của người dùng (một số trình duyệt chặn tải file sau await).
 function dataUrlToBlob(dataUrl) {
@@ -165,6 +173,15 @@ export default function App() {
   // webview trong app) không tải được, nên nếu hỏng sẽ mở khung xem ảnh để nhấn giữ lưu.
   const savePhoto = async () => {
     if (!imageToSave || saveState === 'saving') return;
+
+    // Điện thoại: đi thẳng khung nhấn giữ để lưu. Tải file trên di động không đáng tin —
+    // iOS Safari và trình duyệt trong app đều có thể bỏ qua lệnh tải mà không báo lỗi,
+    // app sẽ tưởng là đã lưu xong trong khi máy không nhận được gì.
+    if (isTouchDevice()) {
+      setShowSaveSheet(true);
+      return;
+    }
+
     setSaveState('saving');
     setSaveHint('');
 
@@ -185,11 +202,7 @@ export default function App() {
       setTimeout(() => URL.revokeObjectURL(url), 10000);
 
       setSaveState('saved');
-      setSaveHint(
-        isTouchDevice()
-          ? 'Ảnh nằm trong thư mục Tải về (Downloads). Không thấy? Bấm "Xem ảnh to" rồi nhấn giữ để lưu.'
-          : 'Đã tải xuống thư mục Downloads.'
-      );
+      setSaveHint('Đã tải xuống thư mục Downloads.');
       setTimeout(() => setSaveState('idle'), 2500);
     } catch (err) {
       console.warn('Không tải được file, chuyển sang xem ảnh để nhấn giữ lưu:', err);
@@ -304,7 +317,7 @@ export default function App() {
                 disabled={saveState === 'saving'}
                 className="bg-[#2a9d8f] text-white px-4 py-2 rounded-full text-xs sm:text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none disabled:opacity-70"
               >
-                {saveState === 'saving' ? '⏳ Đang lưu...' : saveState === 'saved' ? '✅ Đã tải' : '💾 Lưu về máy'}
+                {saveState === 'saving' ? '⏳ Đang lưu...' : saveState === 'saved' ? '✅ Đã tải' : '💾 Lưu ảnh'}
               </button>
               <button
                 onClick={() => setShowSaveSheet(true)}
@@ -333,24 +346,41 @@ export default function App() {
       {/* --- KHUNG XEM ẢNH TO: nhấn giữ để lưu, cách chạy được trên mọi trình duyệt --- */}
       {showSaveSheet && imageToSave && (
         <div
-          className="fixed inset-0 z-[100] bg-black/85 flex flex-col items-center justify-center gap-4 p-4"
+          className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center gap-3 p-4 overflow-y-auto"
           style={{ touchAction: 'auto' }}
         >
-          <p className="handwriting text-white text-2xl text-center leading-snug">
+          <p className="handwriting text-white text-2xl sm:text-3xl text-center leading-snug shrink-0">
             Nhấn giữ vào ảnh → chọn <br /> "Lưu ảnh" / "Tải ảnh xuống"
           </p>
           <img
             src={imageToSave}
             alt="Ảnh vừa chụp"
-            className="max-w-full max-h-[65vh] rounded-2xl border-4 border-white"
+            className="max-w-full max-h-[58vh] rounded-2xl border-4 border-white shrink-0"
             style={{ touchAction: 'auto', WebkitTouchCallout: 'default' }}
           />
-          <button
-            onClick={() => setShowSaveSheet(false)}
-            className="bg-yellow-400 text-black px-6 py-2 rounded-full text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
-          >
-            Đóng
-          </button>
+          {isInAppBrowser() && (
+            <p className="text-white/90 text-xs text-center max-w-xs leading-relaxed">
+              Bạn đang mở trang trong ứng dụng nên máy có thể chặn tải file. Nhấn giữ ảnh vẫn lưu
+              được; nếu không, bấm dấu ⋮ ở góc trên rồi chọn "Mở bằng trình duyệt".
+            </p>
+          )}
+
+          <div className="flex gap-2 flex-wrap justify-center">
+            {typeof navigator !== 'undefined' && !!navigator.share && (
+              <button
+                onClick={sharePhoto}
+                className="bg-[#ffcbf2] text-black px-5 py-2 rounded-full text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
+              >
+                📤 Chia sẻ / Lưu ảnh
+              </button>
+            )}
+            <button
+              onClick={() => setShowSaveSheet(false)}
+              className="bg-yellow-400 text-black px-6 py-2 rounded-full text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
+            >
+              Đóng
+            </button>
+          </div>
         </div>
       )}
 
