@@ -47,6 +47,7 @@ export default function App() {
   const [stream, setStream] = useState(null);
   const [capturedImage, setCapturedImage] = useState(null);
   const [useFallback, setUseFallback] = useState(false); // Chế độ ảnh mẫu khi lỗi Camera
+  const [saveState, setSaveState] = useState('idle'); // idle | saving | saved | error
 
   const videoRefPhone = useRef(null);
   const videoRefCamera = useRef(null);
@@ -107,6 +108,49 @@ export default function App() {
 
   const retakePhoto = () => {
     setCapturedImage(null);
+    setSaveState('idle');
+  };
+
+  // Lưu ảnh về máy: ưu tiên hộp chia sẻ của điện thoại (lưu thẳng vào thư viện ảnh),
+  // nếu máy không hỗ trợ thì tải file xuống như trên desktop.
+  const savePhoto = async () => {
+    if (!capturedImage || saveState === 'saving') return;
+    setSaveState('saving');
+
+    const fileName = `photo-booth-${new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replace(/[:T]/g, '-')}.png`;
+
+    try {
+      const blob = await (await fetch(capturedImage)).blob();
+      const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Photo Booth' });
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      setSaveState('saved');
+      setTimeout(() => setSaveState('idle'), 2000);
+    } catch (err) {
+      // Người dùng bấm huỷ hộp chia sẻ thì không tính là lỗi
+      if (err && err.name === 'AbortError') {
+        setSaveState('idle');
+        return;
+      }
+      console.warn('Không lưu được ảnh:', err);
+      setSaveState('error');
+      setTimeout(() => setSaveState('idle'), 3000);
+    }
   };
 
   // Vị trí mặc định trên màn hình
@@ -184,12 +228,27 @@ export default function App() {
             📸 Chụp ảnh
           </button>
         ) : (
-          <button
-            onClick={retakePhoto}
-            className="bg-yellow-400 text-black px-5 py-2 rounded-full text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
-          >
-            🔄 Chụp lại
-          </button>
+          <>
+            <button
+              onClick={retakePhoto}
+              className="bg-yellow-400 text-black px-5 py-2 rounded-full text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
+            >
+              🔄 Chụp lại
+            </button>
+            <button
+              onClick={savePhoto}
+              disabled={saveState === 'saving'}
+              className="bg-[#2a9d8f] text-white px-5 py-2 rounded-full text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none disabled:opacity-70"
+            >
+              {saveState === 'saving'
+                ? '⏳ Đang lưu...'
+                : saveState === 'saved'
+                ? '✅ Đã lưu'
+                : saveState === 'error'
+                ? '⚠️ Lỗi, thử lại'
+                : '💾 Lưu về máy'}
+            </button>
+          </>
         )}
       </div>
 
