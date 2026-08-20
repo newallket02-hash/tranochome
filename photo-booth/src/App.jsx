@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { composeFramedPhoto } from './framePhoto';
 
 // --- CUSTOM HOOK: Xử lý kéo thả siêu mượt cho cả chuột và cảm ứng ---
 function useDraggable(initialX, initialY) {
@@ -70,6 +71,7 @@ export default function App() {
   const [saveState, setSaveState] = useState('idle'); // idle | saving | saved | error
   const [saveHint, setSaveHint] = useState(''); // dòng hướng dẫn sau khi bấm Lưu
   const [showSaveSheet, setShowSaveSheet] = useState(false); // xem ảnh to để nhấn giữ lưu
+  const [framedImage, setFramedImage] = useState(null); // ảnh đã lồng khung photo booth để lưu
 
   const videoRefPhone = useRef(null);
   const videoRefCamera = useRef(null);
@@ -105,11 +107,22 @@ export default function App() {
     }
   }, [stream, capturedImage]);
 
+  // Lồng ảnh vào khung photo booth để lưu về máy. Ghép hỏng thì vẫn lưu được ảnh thường.
+  const buildFramedImage = async (sourceUrl) => {
+    setFramedImage(null);
+    try {
+      setFramedImage(await composeFramedPhoto(sourceUrl));
+    } catch (err) {
+      console.warn('Không ghép được khung, sẽ lưu ảnh không khung:', err);
+    }
+  };
+
   // Nút chụp ảnh
   const takePhoto = () => {
     if (useFallback) {
       // Nếu đang dùng ảnh mẫu thì "chụp" luôn ảnh mẫu
       setCapturedImage(fallbackImgUrl);
+      buildFramedImage(fallbackImgUrl);
       return;
     }
 
@@ -125,6 +138,7 @@ export default function App() {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageUrl = canvas.toDataURL('image/png');
       setCapturedImage(imageUrl);
+      buildFramedImage(imageUrl);
     }
   };
 
@@ -133,20 +147,24 @@ export default function App() {
     setSaveState('idle');
     setSaveHint('');
     setShowSaveSheet(false);
+    setFramedImage(null);
   };
 
   const buildFileName = () =>
     `photo-booth-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
 
+  // Ảnh đem lưu là ảnh đã lồng khung; chỉ khi ghép khung hỏng mới dùng ảnh trần
+  const imageToSave = framedImage || capturedImage;
+
   const getBlob = async () =>
-    capturedImage.startsWith('data:')
-      ? dataUrlToBlob(capturedImage)
-      : (await fetch(capturedImage)).blob();
+    imageToSave.startsWith('data:')
+      ? dataUrlToBlob(imageToSave)
+      : (await fetch(imageToSave)).blob();
 
   // Tải file .png xuống máy. Trên điện thoại nhiều trình duyệt (iOS Safari, một số
   // webview trong app) không tải được, nên nếu hỏng sẽ mở khung xem ảnh để nhấn giữ lưu.
   const savePhoto = async () => {
-    if (!capturedImage || saveState === 'saving') return;
+    if (!imageToSave || saveState === 'saving') return;
     setSaveState('saving');
     setSaveHint('');
 
@@ -182,7 +200,7 @@ export default function App() {
 
   // Gửi ảnh qua hộp chia sẻ của máy (điện thoại: lưu vào thư viện ảnh, gửi Zalo/Messenger...)
   const sharePhoto = async () => {
-    if (!capturedImage) return;
+    if (!imageToSave) return;
     try {
       const blob = await getBlob();
       const file = new File([blob], buildFileName(), { type: blob.type || 'image/png' });
@@ -313,7 +331,7 @@ export default function App() {
       </div>
 
       {/* --- KHUNG XEM ẢNH TO: nhấn giữ để lưu, cách chạy được trên mọi trình duyệt --- */}
-      {showSaveSheet && capturedImage && (
+      {showSaveSheet && imageToSave && (
         <div
           className="fixed inset-0 z-[100] bg-black/85 flex flex-col items-center justify-center gap-4 p-4"
           style={{ touchAction: 'auto' }}
@@ -322,7 +340,7 @@ export default function App() {
             Nhấn giữ vào ảnh → chọn <br /> "Lưu ảnh" / "Tải ảnh xuống"
           </p>
           <img
-            src={capturedImage}
+            src={imageToSave}
             alt="Ảnh vừa chụp"
             className="max-w-full max-h-[65vh] rounded-2xl border-4 border-white"
             style={{ touchAction: 'auto', WebkitTouchCallout: 'default' }}
@@ -347,7 +365,7 @@ export default function App() {
 
           <div className="w-full mt-7 h-40 bg-yellow-50 rounded-xl border-[3px] border-black overflow-hidden relative flex items-center justify-center">
             {capturedImage ? (
-              <img src={capturedImage} alt="Captured" className="w-full h-full object-cover scale-x-[-1]" />
+              <img src={capturedImage} alt="Captured" className="w-full h-full object-cover" />
             ) : useFallback ? (
               <img src={fallbackImgUrl} alt="Fallback" className="w-full h-full object-cover" />
             ) : (
@@ -396,7 +414,7 @@ export default function App() {
           <div className="text-center font-bold text-[8px] mb-0.5 tracking-widest">FUJIFILM</div>
           <div className="flex-1 bg-black rounded-md border-[3px] border-gray-700 overflow-hidden relative flex items-center justify-center text-white text-[10px]">
             {capturedImage ? (
-              <img src={capturedImage} alt="Captured" className="w-full h-full object-cover scale-x-[-1]" />
+              <img src={capturedImage} alt="Captured" className="w-full h-full object-cover" />
             ) : useFallback ? (
               <img src={fallbackImgUrl} alt="Fallback" className="w-full h-full object-cover" />
             ) : (
