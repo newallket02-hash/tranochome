@@ -68,6 +68,8 @@ export default function App() {
   const [capturedImage, setCapturedImage] = useState(null);
   const [useFallback, setUseFallback] = useState(false); // Chế độ ảnh mẫu khi lỗi Camera
   const [saveState, setSaveState] = useState('idle'); // idle | saving | saved | error
+  const [saveHint, setSaveHint] = useState(''); // dòng hướng dẫn sau khi bấm Lưu
+  const [showSaveSheet, setShowSaveSheet] = useState(false); // xem ảnh to để nhấn giữ lưu
 
   const videoRefPhone = useRef(null);
   const videoRefCamera = useRef(null);
@@ -129,55 +131,70 @@ export default function App() {
   const retakePhoto = () => {
     setCapturedImage(null);
     setSaveState('idle');
+    setSaveHint('');
+    setShowSaveSheet(false);
   };
 
-  // Lưu ảnh về máy: ưu tiên hộp chia sẻ của điện thoại (lưu thẳng vào thư viện ảnh),
-  // nếu máy không hỗ trợ thì tải file xuống như trên desktop.
+  const buildFileName = () =>
+    `photo-booth-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+
+  const getBlob = async () =>
+    capturedImage.startsWith('data:')
+      ? dataUrlToBlob(capturedImage)
+      : (await fetch(capturedImage)).blob();
+
+  // Tải file .png xuống máy. Trên điện thoại nhiều trình duyệt (iOS Safari, một số
+  // webview trong app) không tải được, nên nếu hỏng sẽ mở khung xem ảnh để nhấn giữ lưu.
   const savePhoto = async () => {
     if (!capturedImage || saveState === 'saving') return;
     setSaveState('saving');
-
-    const fileName = `photo-booth-${new Date()
-      .toISOString()
-      .slice(0, 19)
-      .replace(/[:T]/g, '-')}.png`;
+    setSaveHint('');
 
     try {
-      const blob = capturedImage.startsWith('data:')
-        ? dataUrlToBlob(capturedImage)
-        : await (await fetch(capturedImage)).blob();
+      const blob = await getBlob();
+      const fileName = buildFileName();
+      const link = document.createElement('a');
 
-      const file = new File([blob], fileName, { type: blob.type || 'image/png' });
-      const canShareFile =
-        isTouchDevice() && !!navigator.canShare && navigator.canShare({ files: [file] });
+      if (typeof link.download !== 'string') throw new Error('Trình duyệt không hỗ trợ tải file');
 
-      if (canShareFile) {
-        // Điện thoại: mở hộp chia sẻ để lưu thẳng vào thư viện ảnh
-        await navigator.share({ files: [file], title: 'Photo Booth' });
-      } else {
-        // Máy tính: tải file .png xuống thư mục Downloads
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        link.rel = 'noopener';
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
-      }
+      const url = URL.createObjectURL(blob);
+      link.href = url;
+      link.download = fileName;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
 
       setSaveState('saved');
-      setTimeout(() => setSaveState('idle'), 2000);
+      setSaveHint(
+        isTouchDevice()
+          ? 'Ảnh nằm trong thư mục Tải về (Downloads). Không thấy? Bấm "Xem ảnh to" rồi nhấn giữ để lưu.'
+          : 'Đã tải xuống thư mục Downloads.'
+      );
+      setTimeout(() => setSaveState('idle'), 2500);
     } catch (err) {
-      // Người dùng bấm huỷ hộp chia sẻ thì không tính là lỗi
-      if (err && err.name === 'AbortError') {
-        setSaveState('idle');
-        return;
+      console.warn('Không tải được file, chuyển sang xem ảnh để nhấn giữ lưu:', err);
+      setSaveState('idle');
+      setShowSaveSheet(true);
+    }
+  };
+
+  // Gửi ảnh qua hộp chia sẻ của máy (điện thoại: lưu vào thư viện ảnh, gửi Zalo/Messenger...)
+  const sharePhoto = async () => {
+    if (!capturedImage) return;
+    try {
+      const blob = await getBlob();
+      const file = new File([blob], buildFileName(), { type: blob.type || 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Photo Booth' });
+      } else {
+        setShowSaveSheet(true);
       }
-      console.warn('Không lưu được ảnh:', err);
-      setSaveState('error');
-      setTimeout(() => setSaveState('idle'), 3000);
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+      console.warn('Không chia sẻ được ảnh:', err);
+      setShowSaveSheet(true);
     }
   };
 
@@ -247,38 +264,77 @@ export default function App() {
       </div>
 
       {/* Thanh công cụ ở trên cùng */}
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 flex gap-2 w-full justify-center">
-        {!capturedImage ? (
-          <button
-            onClick={takePhoto}
-            className="bg-pink-400 text-white px-5 py-2 rounded-full text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
-          >
-            📸 Chụp ảnh
-          </button>
-        ) : (
-          <>
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 w-full px-2 flex flex-col items-center gap-2">
+        <div className="flex gap-2 justify-center flex-wrap">
+          {!capturedImage ? (
             <button
-              onClick={retakePhoto}
-              className="bg-yellow-400 text-black px-5 py-2 rounded-full text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
+              onClick={takePhoto}
+              className="bg-pink-400 text-white px-5 py-2 rounded-full text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
             >
-              🔄 Chụp lại
+              📸 Chụp ảnh
             </button>
-            <button
-              onClick={savePhoto}
-              disabled={saveState === 'saving'}
-              className="bg-[#2a9d8f] text-white px-5 py-2 rounded-full text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none disabled:opacity-70"
-            >
-              {saveState === 'saving'
-                ? '⏳ Đang lưu...'
-                : saveState === 'saved'
-                ? '✅ Đã lưu'
-                : saveState === 'error'
-                ? '⚠️ Lỗi, thử lại'
-                : '💾 Lưu về máy'}
-            </button>
-          </>
+          ) : (
+            <>
+              <button
+                onClick={retakePhoto}
+                className="bg-yellow-400 text-black px-4 py-2 rounded-full text-xs sm:text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
+              >
+                🔄 Chụp lại
+              </button>
+              <button
+                onClick={savePhoto}
+                disabled={saveState === 'saving'}
+                className="bg-[#2a9d8f] text-white px-4 py-2 rounded-full text-xs sm:text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none disabled:opacity-70"
+              >
+                {saveState === 'saving' ? '⏳ Đang lưu...' : saveState === 'saved' ? '✅ Đã tải' : '💾 Lưu về máy'}
+              </button>
+              <button
+                onClick={() => setShowSaveSheet(true)}
+                className="bg-[#a2d2ff] text-black px-4 py-2 rounded-full text-xs sm:text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
+              >
+                🔍 Xem ảnh to
+              </button>
+              {typeof navigator !== 'undefined' && !!navigator.share && (
+                <button
+                  onClick={sharePhoto}
+                  className="bg-[#ffcbf2] text-black px-4 py-2 rounded-full text-xs sm:text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
+                >
+                  📤 Chia sẻ
+                </button>
+              )}
+            </>
+          )}
+        </div>
+        {saveHint && (
+          <p className="bg-white/90 text-[11px] text-gray-700 px-3 py-1 rounded-full border border-gray-300 text-center max-w-xs">
+            {saveHint}
+          </p>
         )}
       </div>
+
+      {/* --- KHUNG XEM ẢNH TO: nhấn giữ để lưu, cách chạy được trên mọi trình duyệt --- */}
+      {showSaveSheet && capturedImage && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/85 flex flex-col items-center justify-center gap-4 p-4"
+          style={{ touchAction: 'auto' }}
+        >
+          <p className="handwriting text-white text-2xl text-center leading-snug">
+            Nhấn giữ vào ảnh → chọn <br /> "Lưu ảnh" / "Tải ảnh xuống"
+          </p>
+          <img
+            src={capturedImage}
+            alt="Ảnh vừa chụp"
+            className="max-w-full max-h-[65vh] rounded-2xl border-4 border-white"
+            style={{ touchAction: 'auto', WebkitTouchCallout: 'default' }}
+          />
+          <button
+            onClick={() => setShowSaveSheet(false)}
+            className="bg-yellow-400 text-black px-6 py-2 rounded-full text-sm font-bold border-2 border-black shadow-[2px_2px_0px_black] active:translate-y-1 active:shadow-none"
+          >
+            Đóng
+          </button>
+        </div>
+      )}
 
       {/* --- KHUNG 1: ĐIỆN THOẠI NẮP GẬP --- */}
       <div {...phoneDrag} className="flex flex-col items-center drop-shadow-xl select-none">
