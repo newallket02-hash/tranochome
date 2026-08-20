@@ -3,7 +3,9 @@
 Web app photo booth dễ thương: một chiếc điện thoại nắp gập và một máy ảnh kỹ thuật số
 có thể kéo thả tự do trên màn hình, cả hai cùng hiển thị luồng camera trước.
 Bấm **Chụp ảnh** để lấy khung hình (đã lật gương), **Chụp lại** để quay về live view,
-**Lưu về máy** để tải ảnh xuống (trên điện thoại sẽ mở hộp chia sẻ để lưu thẳng vào thư viện ảnh).
+**Lưu về máy** để tải ảnh xuống, **Chia sẻ** để gửi qua hộp chia sẻ của máy, và
+**Xem ảnh to** để nhấn giữ vào ảnh rồi lưu — cách chạy được trên mọi trình duyệt kể cả khi
+tải file bị chặn.
 
 Nếu trình duyệt chặn camera, app tự chuyển sang chế độ ảnh mẫu để vẫn trải nghiệm được.
 
