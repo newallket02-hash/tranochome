@@ -42,6 +42,26 @@ function useDraggable(initialX, initialY) {
   };
 }
 
+// Hộp chia sẻ của Windows/macOS không có lựa chọn lưu ra file, chỉ gửi sang app khác.
+// Vì vậy chỉ dùng navigator.share trên thiết bị cảm ứng; máy tính thì tải file xuống.
+function isTouchDevice() {
+  if (typeof navigator === 'undefined') return false;
+  if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) return true;
+  // iPadOS khai báo user agent giống máy Mac
+  return /Mac/.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+}
+
+// Đổi data URL sang Blob mà không cần fetch, để cú click tải file nằm gọn
+// trong thao tác của người dùng (một số trình duyệt chặn tải file sau await).
+function dataUrlToBlob(dataUrl) {
+  const [header, body] = dataUrl.split(',');
+  const mime = (header.match(/:(.*?);/) || [])[1] || 'image/png';
+  const binary = atob(body);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
 export default function App() {
   const [hasEntered, setHasEntered] = useState(false);
   const [stream, setStream] = useState(null);
@@ -123,20 +143,28 @@ export default function App() {
       .replace(/[:T]/g, '-')}.png`;
 
     try {
-      const blob = await (await fetch(capturedImage)).blob();
-      const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+      const blob = capturedImage.startsWith('data:')
+        ? dataUrlToBlob(capturedImage)
+        : await (await fetch(capturedImage)).blob();
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+      const canShareFile =
+        isTouchDevice() && !!navigator.canShare && navigator.canShare({ files: [file] });
+
+      if (canShareFile) {
+        // Điện thoại: mở hộp chia sẻ để lưu thẳng vào thư viện ảnh
         await navigator.share({ files: [file], title: 'Photo Booth' });
       } else {
+        // Máy tính: tải file .png xuống thư mục Downloads
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         link.download = fileName;
+        link.rel = 'noopener';
         document.body.appendChild(link);
         link.click();
         link.remove();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
       }
 
       setSaveState('saved');
